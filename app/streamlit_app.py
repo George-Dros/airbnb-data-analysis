@@ -128,7 +128,7 @@ with col3:
 st.markdown("---") 
 st.header("📈 Visualizations")
 
-tab1, tab2, tab3, tab4 = st.tabs(["📦 Price by Room Type","🔹 Price Distribution" ,"📍 Price vs Availability","Avg Price per Neighbourhood"])
+tab1, tab2, tab3, tab4 = st.tabs(["📦 Price by Room Type","🔹 Price Distribution" ,"📍 Price vs Availability","🏙️ Avg Price per Neighbourhood"])
 
 with tab1:
     log_scale1 = st.checkbox("Use log scale", value=False,key="log_1")
