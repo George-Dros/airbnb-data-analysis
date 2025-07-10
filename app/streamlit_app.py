@@ -2,6 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import streamlit as st
 import seaborn as sns
+import numpy as np
 
 # Data preparing
 
@@ -43,9 +44,9 @@ else:
 host_state = st.sidebar.checkbox(label="Owner is Superhost", value=False)
 
 price_range = st.sidebar.slider(label="Price Range",
-                                min_value=0.0,
+                                min_value=0.00,
                                 max_value=max_price,
-                                value = (0.0, max_price)
+                                value = (0.00, max_price)
                                 )
 
 min_price_selected, max_price_selected = price_range
@@ -67,6 +68,12 @@ df_filtered = df[
     (df['price'] >= min_price_selected) & (df['price'] <= max_price_selected) &
     (df['minimum_nights'] >= min_nights) & (df['maximum_nights'] <= max_nights)
 ]
+
+if outliers_state:
+    threshold = df_filtered['price'].quantile(0.99)
+    df_filtered = df_filtered[df_filtered['price'] <= threshold]
+
+df_filtered['log_price'] = np.log1p(df_filtered['price'])
 
 mean_price = df_filtered['price'].mean()
 total_listings = len(df_filtered)
@@ -121,13 +128,127 @@ with col3:
 st.markdown("---") 
 st.header("📈 Visualizations")
 
+tab1, tab2, tab3, tab4 = st.tabs(["📦 Price by Room Type","🔹 Price Distribution" ,"📍 Price vs Availability","Avg Price per Neighbourhood"])
 
+with tab1:
+    log_scale1 = st.checkbox("Use log scale", value=False,key="log_1")
+
+    if log_scale1:      
+        fig1, ax1 = plt.subplots(figsize=(10, 6))
+        sns.boxplot(data=df_filtered, x='room_type', y='log_price', ax=ax1)
+        ax1.set_title('Boxplot of Log(Price + 1) by Room Type')
+        ax1.set_ylabel('Log(Price + 1)')
+        ax1.set_xlabel('Room Type')
+        st.pyplot(fig1)
+
+    else:
+        fig1, ax1 = plt.subplots(figsize=(10, 6))
+        sns.boxplot(data=df_filtered, x='room_type', y='price', ax=ax1)
+        ax1.set_title('Boxplot of Price by Room Type')
+        ax1.set_ylabel('Price')
+        ax1.set_xlabel('Room Type')
+        st.pyplot(fig1)
+
+
+with tab2:
+    log_scale2 = st.checkbox("Use log scale", value=False,key="log_2")
+    
+    if log_scale2:
+        price_data = df_filtered['log_price']
+        x_label = "Log(Price + 1)"
+        
+    else:
+        price_data = df_filtered['price']
+        x_label = "Price (€)"
+
+    fig2, ax2 = plt.subplots(figsize=(10, 6))
+    sns.histplot(price_data, bins=50, kde=False, ax=ax2)
+    ax2.set_title("Histogram of Price Distribution")   
+    ax2.set_xlabel(x_label)
+    ax2.set_ylabel("Count")
+    st.pyplot(fig2)
+
+
+with tab3:
+    fig3, ax3 = plt.subplots(figsize=(10, 6))
+    sns.scatterplot(
+        data=df_filtered,
+        x='availability_365',
+        y='price',
+        hue='room_type',
+        alpha=0.6,
+        ax=ax3
+    )
+    ax3.set_title("Price vs Availability (365 days)")
+    ax3.set_xlabel("Availability (Days per Year)")
+    ax3.set_ylabel("Price (€)")
+    st.pyplot(fig3)
+
+
+with tab4:
+    avg_price_by_neighbourhood = (
+    df_filtered.groupby('neighbourhood_cleansed')['price']
+    .mean()
+    .sort_values(ascending=False)
+)
+    top_n = st.slider("Show top N neighbourhoods by avg price", 5, 30, 15)
+    avg_price_df = avg_price_by_neighbourhood.reset_index()
+
+    avg_price_df = avg_price_df.head(top_n)
+    fig4, ax4 = plt.subplots(figsize=(10, 8))
+    sns.barplot(
+        data=avg_price_df,
+        y='neighbourhood_cleansed',
+        x='price',
+        ax=ax4
+    )
+    ax4.set_title("Average Price by Neighbourhood")
+    ax4.set_xlabel("Average Price (€)")
+    ax4.set_ylabel("Neighbourhood")
+    st.pyplot(fig4)
 
 st.markdown("---") 
-st.header("📋 Filtered Listings (Optional)")
+st.header("📋 Filtered Listings")
 
+show_table = st.checkbox("Show filtered data table")
+
+if show_table:
+    st.dataframe(df_filtered.head(50))
+    csv = df_filtered.to_csv(index=False)
+    st.download_button("Download as CSV", csv, "filtered_listings.csv", "text/csv")
 
 st.markdown("---") 
 st.header("📎 Notes & Insights")
+
+insights = []
+
+# Expensive Neighborhoods
+expensive_areas = df_filtered.groupby("neighbourhood_cleansed")["price"].mean().sort_values(ascending=False)
+if expensive_areas.iloc[0] > 200:
+    insights.append(f"🏙️ **{expensive_areas.index[0]}** has the highest average price at €{expensive_areas.iloc[0]:.0f}.")
+
+# Superhost Performance
+if host_state:
+    avg_rating_superhost = df_filtered['review_scores_rating'].mean()
+    if avg_rating_superhost > 4.7:
+        insights.append("🌟 Superhosts have high ratings — averaging above 4.7.")
+
+# Log price skew
+if df_filtered['price'].skew() > 1.5:
+    insights.append("📈 Price distribution is right-skewed. Consider using log-scale for better clarity.")
+
+# Popular Room Type
+most_common_room = df_filtered['room_type'].value_counts().idxmax()
+count_most = df_filtered['room_type'].value_counts().max()
+insights.append(f"🏠 The most common room type is **{most_common_room}**, appearing {count_most} times.")
+
+# Listings Count Warning
+if total_listings < 20:
+    insights.append("⚠️ Too few listings — try widening the filters.")
+
+# Show
+st.markdown("### Key Observations")
+for insight in insights:
+    st.markdown(f"- {insight}")
 
 
